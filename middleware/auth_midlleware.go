@@ -1,14 +1,19 @@
 package middleware
 
 import (
-    "github.com/gin-gonic/gin"
-    "net/http"
+	"go-redpanda-streaming/domain"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
 )
 
-func APIKeyAuthMiddleware(apiKey string) gin.HandlerFunc {
+// APIKeyAuthMiddleware checks for a valid API key in the request headers
+func APIKeyAuthMiddleware(apiKeyStore domain.APIKeyStore) gin.HandlerFunc {
     return func(c *gin.Context) {
-        if c.GetHeader("X-API-KEY") != apiKey {
-            c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+        apiKey := c.GetHeader("X-API-Key")
+        if !apiKeyStore.IsValidAPIKey(apiKey) {
+            c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+            c.Abort()
             return
         }
         c.Next()
