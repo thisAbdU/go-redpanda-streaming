@@ -22,7 +22,7 @@ func main() {
     }
 
     // Setup repositories
-    kafkaRepo := repository.NewKafkaRepository(config.Kafka.Brokers)
+    kafkaRepo := repository.NewKafkaRepository([]string{"redpanda:9092"})
 
     // Setup use cases
     streamUsecase := usecase.NewStreamUsecase(kafkaRepo)

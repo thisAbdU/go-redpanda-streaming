@@ -24,11 +24,13 @@ func NewStreamController(usecase domain.StreamUsecase, apiKeyStore domain.APIKey
 }
 
 func (c *StreamController) StartStream(ctx *gin.Context) {
-    streamID := ctx.Param("stream_id")
+    streamID := ctx.Query("stream_id")
+    
     if err := c.usecase.StartStream(streamID); err != nil {
         ctx.JSON(500, gin.H{"error": err.Error()})
         return
     }
+
     ctx.JSON(http.StatusOK, gin.H{"status": "Stream started"})
 }
 

@@ -1,11 +1,15 @@
 package repository
 
 import (
-    "context"
-    "go-redpanda-streaming/domain"
-    "log"
-    "github.com/segmentio/kafka-go"
-    "sync"
+	"context"
+	"fmt"
+	"go-redpanda-streaming/domain"
+	"go-redpanda-streaming/utils"
+	"log"
+	"os"
+	"sync"
+
+	"github.com/segmentio/kafka-go"
 )
 
 type KafkaRepository struct {
@@ -25,8 +29,19 @@ func NewKafkaRepository(brokers []string) *KafkaRepository {
 }
 
 func (r *KafkaRepository) StartStream(streamID string) error {
-    conn, err := kafka.DialLeader(context.Background(), "tcp", "localhost:9092", streamID, 0)
+    // Validate the streamID to ensure it's a valid topic name
+    
+    if !utils.IsValidTopicName(streamID) {
+        return fmt.Errorf("invalid topic name: %s", streamID)
+    }
+
+    // kafkaBrokerURL := r.writer.Addr.String()
+    kafkaBrokerURL := os.Getenv("KAFKA_BROKER_URL") 
+    log.Println("Connecting to Kafka broker at:", kafkaBrokerURL)
+    
+    conn, err := kafka.DialLeader(context.Background(), "tcp", kafkaBrokerURL, streamID, 0)
     if err != nil {
+        log.Println("The error comes =================================", err )
         log.Printf("Failed to dial leader for stream %s: %v", streamID, err)
         return err
     }
@@ -38,6 +53,9 @@ func (r *KafkaRepository) StartStream(streamID string) error {
         NumPartitions:     1,
         ReplicationFactor: 1,
     })
+
+    log.Println("No the error ==============================", err)
+
     if err != nil {
         log.Printf("Failed to create topic for stream %s: %v", streamID, err)
         return err
@@ -67,7 +85,7 @@ func (r *KafkaRepository) ReceiveMessages(streamID string) (<-chan domain.Messag
     reader, exists := r.readers[streamID]
     if !exists {
         reader = kafka.NewReader(kafka.ReaderConfig{
-            Brokers: []string{"localhost:9092"},
+            Brokers: []string{"redpanda:9092"},
             Topic:   streamID,
             GroupID: streamID,
         })
