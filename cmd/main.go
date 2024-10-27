@@ -44,5 +44,5 @@ func main() {
 
     // Start server
     router := routes.SetupRouter(streamController, log, apiKeyStore)
-    log.Fatal(router.Run(":" + config.WebSocketPort)) // Use the port from config
+    log.Fatal(router.Run(":" + config.WebSocketPort))
 }
