@@ -2,11 +2,13 @@ package controller
 
 import (
 	"go-redpanda-streaming/domain"
+	"go-redpanda-streaming/utils"
 
 	"net/http"
 
-	"github.com/gin-gonic/gin"
 	"go-redpanda-streaming/repository"
+
+	"github.com/gin-gonic/gin"
 )
 
 type StreamController struct {
@@ -75,4 +77,13 @@ func (c *StreamController) hasAccessToStream(ctx *gin.Context, streamID string) 
     }
 
     return false
+}
+
+func (c *StreamController)GenerateAPIKey(ctx *gin.Context) {
+    streamID := ctx.Param("stream_id")
+
+    apiKey := utils.GenerateAPIKey(streamID) 
+    c.apiKeyStore.AddAPIKey(apiKey, streamID)
+
+    ctx.JSON(http.StatusOK, gin.H{"apiKey": apiKey})
 }

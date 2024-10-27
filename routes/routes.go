@@ -13,6 +13,8 @@ import (
 func SetupRouter(streamController *controller.StreamController, log *logrus.Logger,  apiKeyStore domain.APIKeyStore) *gin.Engine {
 	router := gin.Default()
 
+	router.POST("/generate-api-key/:stream_id", streamController.GenerateAPIKey)
+
 	// Use the logging middleware
 	router.Use(middleware.LoggerMiddleware(log))
 
