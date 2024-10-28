@@ -9,7 +9,7 @@ type StreamUsecase struct {
     repo *repository.KafkaRepository
 }
 
-func NewStreamUsecase(kafkaRepo *repository.KafkaRepository) *StreamUsecase {
+func NewStreamUsecase(kafkaRepo *repository.KafkaRepository) domain.StreamUsecase {
     return &StreamUsecase{repo: kafkaRepo}
 }
 

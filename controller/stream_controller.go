@@ -2,7 +2,6 @@ package controller
 
 import (
 	"go-redpanda-streaming/domain"
-	"go-redpanda-streaming/usecase"
 	"go-redpanda-streaming/utils"
 
 	"net/http"
@@ -13,11 +12,11 @@ import (
 )
 
 type StreamController struct {
-    usecase *usecase.StreamUsecase
+    usecase domain.StreamUsecase
     apiKeyStore domain.APIKeyStore
 }
 
-func NewStreamController(usecase *usecase.StreamUsecase, apiKeyStore domain.APIKeyStore) *StreamController {
+func NewStreamController(usecase domain.StreamUsecase, apiKeyStore domain.APIKeyStore) *StreamController {
     return &StreamController{
         usecase: usecase,
         apiKeyStore: apiKeyStore,
