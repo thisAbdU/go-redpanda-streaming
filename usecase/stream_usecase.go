@@ -9,9 +9,6 @@ type StreamUsecase struct {
     repo *repository.KafkaRepository
 }
 
-// func NewStreamUsecase(repo domain.StreamRepository) *StreamUsecase {
-//     return &StreamUsecase{repo: repo}
-// }
 func NewStreamUsecase(kafkaRepo *repository.KafkaRepository) *StreamUsecase {
     return &StreamUsecase{repo: kafkaRepo}
 }
