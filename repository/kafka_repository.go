@@ -1,31 +1,39 @@
 package repository
 
 import (
-	"context"
+	// "context"
 	"fmt"
 	"go-redpanda-streaming/domain"
 	"go-redpanda-streaming/utils"
 	"log"
-	"os"
 	"sync"
 
-	"github.com/segmentio/kafka-go"
+	"github.com/IBM/sarama"
+	// "github.com/segmentio/kafka-go"
+	// "github.com/Shopify/sarama"
 )
 
 type KafkaRepository struct {
-    writer  *kafka.Writer
-    readers map[string]*kafka.Reader
-    mu      sync.Mutex
+	producer sarama.SyncProducer
+	readers  map[string]*sarama.Consumer
+	mu       sync.Mutex
 }
 
 func NewKafkaRepository(brokers []string) *KafkaRepository {
-    writer := kafka.NewWriter(kafka.WriterConfig{
-        Brokers: brokers,
-    })
-    return &KafkaRepository{
-        writer:  writer,
-        readers: make(map[string]*kafka.Reader),
-    }
+	config := sarama.NewConfig()
+	config.Producer.RequiredAcks = sarama.WaitForAll
+	config.Producer.Partitioner = sarama.NewRandomPartitioner
+	config.Producer.Return.Successes = true
+
+	producer, err := sarama.NewSyncProducer(brokers, config)
+	if err != nil {
+		log.Fatalf("Error creating producer: %v", err)
+	}
+
+	return &KafkaRepository{
+		producer: producer,
+		readers:  make(map[string]*sarama.Consumer),
+	}
 }
 
 func (r *KafkaRepository) StartStream(streamID string) error {
@@ -35,104 +43,118 @@ func (r *KafkaRepository) StartStream(streamID string) error {
         return fmt.Errorf("invalid topic name: %s", streamID)
     }
 
-    // kafkaBrokerURL := r.writer.Addr.String()
-    kafkaBrokerURL := os.Getenv("KAFKA_BROKER_URL") 
-    log.Println("Connecting to Kafka broker at:", kafkaBrokerURL)
-    
-    conn, err := kafka.DialLeader(context.Background(), "tcp", kafkaBrokerURL, streamID, 0)
-    if err != nil {
-        log.Println("The error comes =================================", err )
-        log.Printf("Failed to dial leader for stream %s: %v", streamID, err)
-        return err
-    }
-    defer conn.Close()
+	// Create the topic if it doesn't exist
+	topic := "streaming"
+	err := r.createTopicIfNotExists(topic)
+	if err != nil {
+		return fmt.Errorf("failed to create topic %s: %v", topic, err)
+	}
 
-    // Create topic if it doesn't exist
-    err = conn.CreateTopics(kafka.TopicConfig{
-        Topic:             streamID,
-        NumPartitions:     1,
-        ReplicationFactor: 1,
-    })
+	log.Printf("Stream %s started successfully", streamID)
+	return nil
+}
 
-    log.Println("No the error ==============================", err)
+func (r *KafkaRepository) createTopicIfNotExists(topic string) error {
+	// Check if the topic already exists
+	adminClient, err := sarama.NewClusterAdmin([]string{"localhost:9092"}, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create admin client: %v", err)
+	}
+	defer adminClient.Close()
 
-    if err != nil {
-        log.Printf("Failed to create topic for stream %s: %v", streamID, err)
-        return err
-    }
+	// Check if the topic exists
+	topics, err := adminClient.ListTopics()
+	if err != nil {
+		return fmt.Errorf("failed to list topics: %v", err)
+	}
 
-    log.Printf("Stream %s started successfully", streamID)
-    return nil
+	if _, exists := topics[topic]; !exists {
+		// Create the topic with 1 partition and a replication factor of 1
+		err = adminClient.CreateTopic(topic, &sarama.TopicDetail{
+			NumPartitions:     1,
+			ReplicationFactor: 1,
+		}, false)
+		if err != nil {
+			return fmt.Errorf("failed to create topic %s: %v", topic, err)
+		}
+		log.Printf("Topic %s created successfully", topic)
+	} else {
+		log.Printf("Topic %s already exists", topic)
+	}
+
+	return nil
 }
 
 func (r *KafkaRepository) SendMessage(streamID string, message domain.Message) error {
-    go func() {
-        err := r.writer.WriteMessages(context.Background(), kafka.Message{
-            Key:   []byte(streamID),
-            Value: []byte(message.Payload),
-        })
-        if err != nil {
-            log.Printf("Failed to send message to stream %s: %v", streamID, err)
-        } else {
-            log.Printf("Message sent to stream %s: %s", streamID, message.Payload)
-        }
-    }()
-    return nil
+	msg := &sarama.ProducerMessage{
+		Topic: streamID,
+		Key:   sarama.StringEncoder(message.StreamID), // Use StreamID as the key
+		Value: sarama.StringEncoder(message.Payload),   // Use Payload as the message value
+	}
+
+	_, _, err := r.producer.SendMessage(msg)
+	if err != nil {
+		log.Printf("Failed to send message to stream %s: %v", streamID, err)
+		return err
+	}
+
+	log.Printf("Message sent to stream %s: %s", streamID, message.Payload)
+	return nil
 }
 
-func (r *KafkaRepository) ReceiveMessages(streamID string) (<-chan domain.Message, error) {
-    r.mu.Lock()
-    reader, exists := r.readers[streamID]
-    if !exists {
-        reader = kafka.NewReader(kafka.ReaderConfig{
-            Brokers: []string{"redpanda:9092"},
-            Topic:   streamID,
-            GroupID: streamID,
-        })
-        r.readers[streamID] = reader
-    }
-    r.mu.Unlock()
+// func (r *KafkaRepository) ReceiveMessages(streamID string) (<-chan domain.Message, error) {
+//     r.mu.Lock()
+//     reader, exists := r.readers[streamID]
+//     if !exists {
+//         reader = kafka.NewReader(kafka.ReaderConfig{
+//             Brokers: []string{"redpanda:9092"},
+//             Topic:   streamID,
+//             GroupID: streamID,
+//         })
+//         r.readers[streamID] = reader
+//     }
+//     r.mu.Unlock()
 
-    ch := make(chan domain.Message, 100) // Buffered channel for high throughput
+//     ch := make(chan domain.Message, 100) // Buffered channel for high throughput
 
-    go func() {
-        defer reader.Close()
-        for {
-            msg, err := reader.ReadMessage(context.Background())
-            if err != nil {
-                log.Printf("Failed to read message from stream %s: %v", streamID, err)
-                close(ch)
-                return
-            }
-            log.Printf("Message received from stream %s: %s", streamID, string(msg.Value))
-            processedMsg := domain.Message{
-                StreamID: streamID,
-                Payload:  "Processed: " + string(msg.Value),
-            }
-            ch <- processedMsg
+//     go func() {
+//         defer reader.Close()
+//         for {
+//             msg, err := reader.ReadMessage(context.Background())
+//             if err != nil {
+//                 log.Printf("Failed to read message from stream %s: %v", streamID, err)
+//                 close(ch)
+//                 return
+//             }
+//             log.Printf("Message received from stream %s: %s", streamID, string(msg.Value))
+//             processedMsg := domain.Message{
+//                 StreamID: streamID,
+//                 Payload:  "Processed: " + string(msg.Value),
+//             }
+//             ch <- processedMsg
 
-            // Send processed message to WebSocket clients
-            Hub.Broadcast([]byte(processedMsg.Payload))
-        }
-    }()
-    return ch, nil
-}
+//             // Send processed message to WebSocket clients
+//             Hub.Broadcast([]byte(processedMsg.Payload))
+//         }
+//     }()
+//     return ch, nil
+// }
 
-func (r *KafkaRepository) GetResults(streamID string) ([]domain.Message, error) {
-    // Simulate real-time processing
-    messages := []domain.Message{}
-    ch, err := r.ReceiveMessages(streamID)
-    if err != nil {
-        return nil, err
-    }
+// func (r *KafkaRepository) GetResults(streamID string) ([]domain.Message, error) {
+//     // Simulate real-time processing
+//     messages := []domain.Message{}
+//     ch, err := r.ReceiveMessages(streamID)
+//     if err != nil {
+//         return nil, err
+//     }
 
-    for msg := range ch {
-        // Simulate processing (e.g., transformation or aggregation)
-        processedMsg := domain.Message{
-            StreamID: msg.StreamID,
-            Payload:  "Processed: " + msg.Payload,
-        }
-        messages = append(messages, processedMsg)
-    }
-    return messages, nil
-}
+//     for msg := range ch {
+//         // Simulate processing (e.g., transformation or aggregation)
+//         processedMsg := domain.Message{
+//             StreamID: msg.StreamID,
+//             Payload:  "Processed: " + msg.Payload,
+//         }
+//         messages = append(messages, processedMsg)
+//     }
+//     return messages, nil
+// }

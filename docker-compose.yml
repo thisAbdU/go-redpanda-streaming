@@ -1,102 +1,29 @@
-# version: '3.8'
-
-# services:
-#   zookeeper:
-#     image: wurstmeister/zookeeper:latest
-#     ports:
-#       - "2181:2181"
-
-#   redpanda:
-#     image: docker.redpanda.com/redpandadata/redpanda:latest
-#     ports:
-#       - "9092:9092"
-#       - "29092:29092"
-#     environment:
-#       REDPANDA_AUTO_CREATE_TOPICS_ENABLED: "true"
-#       REDPANDA_LISTENERS: "PLAINTEXT://0.0.0.0:9092"
-#       REDPANDA_ADVERTISED_LISTENERS: "PLAINTEXT://redpanda:9092"
-#       REDPANDA_LOG_LEVEL: "info"
-
-#   app:
-#     build: .
-#     ports:
-#       - "8080:8080"
-#     environment:
-#       KAFKA_BROKER_URL: redpanda:9092
-#       API_KEY: your_api_key
-#       KAFKA_TOPIC: stream_topic
-#       WEBSOCKET_PORT: 8080
-#     depends_on:
-#       - redpanda
-#       - zookeeper
-version: '3.8'
-
-networks:
-  redpanda_network:
-    driver: bridge
-
-volumes:
-  redpanda-0: null
-
+version: '3.7'
 services:
-  redpanda-0:
-    image: docker.redpanda.com/redpandadata/redpanda:v24.2.7
-    container_name: redpanda-0
+  redpanda:
+    image: docker.redpanda.com/vectorized/redpanda:v21.11.15
+    container_name: redpanda-1
     command:
-      - redpanda
-      - start
-      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
-      - --advertise-kafka-addr internal://redpanda-0:9092,external://localhost:19092
-      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
-      - --advertise-pandaproxy-addr internal://redpanda-0:8082,external://localhost:18082
-      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
-      - --rpc-addr redpanda-0:33145
-      - --advertise-rpc-addr redpanda-0:33145
-      - --mode dev-container
-      - --smp 1
-      - --default-log-level=info
-    volumes:
-      - redpanda-0:/var/lib/redpanda/data
-    networks:
-      - redpanda_network
+    - redpanda
+    - start
+    - --smp
+    - '1'
+    - --reserve-memory
+    - 0M
+    - --overprovisioned
+    - --node-id
+    - '0'
+    - --kafka-addr
+    - PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+    - --advertise-kafka-addr
+    - PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+    - --pandaproxy-addr
+    - PLAINTEXT://0.0.0.0:28082,OUTSIDE://0.0.0.0:8082
+    - --advertise-pandaproxy-addr
+    - PLAINTEXT://redpanda:28082,OUTSIDE://localhost:8082
     ports:
-      - 18081:18081
-      - 18082:18082
-      - 19092:19092
-      - 19644:9644
-
-  console:
-    container_name: redpanda-console
-    image: docker.redpanda.com/redpandadata/console:v2.7.2
-    networks:
-      - redpanda_network
-    entrypoint: /bin/sh
-    command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml; /app/console'
-    environment:
-      CONFIG_FILEPATH: /tmp/config.yml
-      CONSOLE_CONFIG_FILE: |
-        kafka:
-          brokers: ["redpanda-0:9092"]
-          schemaRegistry:
-            enabled: true
-            urls: ["http://redpanda-0:8081"]
-        redpanda:
-          adminApi:
-            enabled: true
-            urls: ["http://redpanda-0:9644"]
-    ports:
-      - 8080:8080
-    depends_on:
-      - redpanda-0
-
-  go-app:
-    build: .
-    container_name: go-app
-    networks:
-      - redpanda_network
-    depends_on:
-      - redpanda-0
-    environment:
-      KAFKA_BROKER_URL: "redpanda-0:9092"  # Set Kafka broker URL for the Go app
-    ports:
-      - 8081:8081  # Expose Go app port if needed
+    - 8081:8081
+    - 8082:8082
+    - 9092:9092
+    - 28082:28082
+    - 29092:29092

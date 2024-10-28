@@ -2,6 +2,7 @@ package controller
 
 import (
 	"go-redpanda-streaming/domain"
+	"go-redpanda-streaming/usecase"
 	"go-redpanda-streaming/utils"
 
 	"net/http"
@@ -12,11 +13,11 @@ import (
 )
 
 type StreamController struct {
-    usecase domain.StreamUsecase
+    usecase *usecase.StreamUsecase
     apiKeyStore domain.APIKeyStore
 }
 
-func NewStreamController(usecase domain.StreamUsecase, apiKeyStore domain.APIKeyStore) *StreamController {
+func NewStreamController(usecase *usecase.StreamUsecase, apiKeyStore domain.APIKeyStore) *StreamController {
     return &StreamController{
         usecase: usecase,
         apiKeyStore: apiKeyStore,
@@ -48,15 +49,15 @@ func (c *StreamController) SendData(ctx *gin.Context) {
     ctx.JSON(http.StatusOK, gin.H{"status": "Data sent"})
 }
 
-func (c *StreamController) GetResults(ctx *gin.Context) {
-    streamID := ctx.Param("stream_id")
-    results, err := c.usecase.GetResults(streamID)
-    if err != nil {
-        ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-        return
-    }
-    ctx.JSON(http.StatusOK, gin.H{"results": results})
-}
+// func (c *StreamController) GetResults(ctx *gin.Context) {
+//     streamID := ctx.Param("stream_id")
+//     results, err := c.usecase.GetResults(streamID)
+//     if err != nil {
+//         ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+//         return
+//     }
+//     ctx.JSON(http.StatusOK, gin.H{"results": results})
+// }
 
 func (c *StreamController) HandleWebSocket(ctx *gin.Context) {
     streamID := ctx.Param("stream_id")
