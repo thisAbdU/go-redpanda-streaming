@@ -22,7 +22,7 @@ func SetupRouter(streamController *controller.StreamController, log *logrus.Logg
 
 	router.POST("/stream/send/:stream_id", streamController.SendData)
 
-    // router.GET("/stream/results/:stream_id", streamController.GetResults)
+    router.GET("/stream/results/:stream_id", streamController.GetResults)
 	// Use the API key authentication middleware
 	router.Use(middleware.APIKeyAuthMiddleware(apiKeyStore))
 

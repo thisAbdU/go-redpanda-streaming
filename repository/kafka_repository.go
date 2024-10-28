@@ -9,8 +9,6 @@ import (
 	"sync"
 
 	"github.com/IBM/sarama"
-	// "github.com/segmentio/kafka-go"
-	// "github.com/Shopify/sarama"
 )
 
 type KafkaRepository struct {
@@ -101,60 +99,59 @@ func (r *KafkaRepository) SendMessage(streamID string, message domain.Message) e
 	log.Printf("Message sent to stream %s: %s", streamID, message.Payload)
 	return nil
 }
+func (r *KafkaRepository) ReceiveMessages(streamID string) (<-chan domain.Message, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-// func (r *KafkaRepository) ReceiveMessages(streamID string) (<-chan domain.Message, error) {
-//     r.mu.Lock()
-//     reader, exists := r.readers[streamID]
-//     if !exists {
-//         reader = kafka.NewReader(kafka.ReaderConfig{
-//             Brokers: []string{"redpanda:9092"},
-//             Topic:   streamID,
-//             GroupID: streamID,
-//         })
-//         r.readers[streamID] = reader
-//     }
-//     r.mu.Unlock()
+	// Create a new consumer if it doesn't exist
+	if _, exists := r.readers[streamID]; !exists {
+		consumer, err := sarama.NewConsumer([]string{"localhost:9092"}, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create consumer: %v", err)
+		}
+		r.readers[streamID] = &consumer // Store the consumer interface directly
+	}
 
-//     ch := make(chan domain.Message, 100) // Buffered channel for high throughput
+	// Create a channel to return messages
+	ch := make(chan domain.Message)
 
-//     go func() {
-//         defer reader.Close()
-//         for {
-//             msg, err := reader.ReadMessage(context.Background())
-//             if err != nil {
-//                 log.Printf("Failed to read message from stream %s: %v", streamID, err)
-//                 close(ch)
-//                 return
-//             }
-//             log.Printf("Message received from stream %s: %s", streamID, string(msg.Value))
-//             processedMsg := domain.Message{
-//                 StreamID: streamID,
-//                 Payload:  "Processed: " + string(msg.Value),
-//             }
-//             ch <- processedMsg
+	go func() {
+		defer close(ch)
+		partitionConsumer, err := (*r.readers[streamID]).ConsumePartition("streaming", 0, sarama.OffsetNewest)
+		if err != nil {
+			log.Printf("Failed to start partition consumer: %v", err)
+			return
+		}
+		defer partitionConsumer.Close()
 
-//             // Send processed message to WebSocket clients
-//             Hub.Broadcast([]byte(processedMsg.Payload))
-//         }
-//     }()
-//     return ch, nil
-// }
+		for msg := range partitionConsumer.Messages() {
+			// Create a domain.Message from the consumed message
+			receivedMessage := domain.Message{
+				StreamID: string(msg.Key),
+				Payload:  string(msg.Value),
+			}
+			ch <- receivedMessage
+		}
+	}()
 
-// func (r *KafkaRepository) GetResults(streamID string) ([]domain.Message, error) {
-//     // Simulate real-time processing
-//     messages := []domain.Message{}
-//     ch, err := r.ReceiveMessages(streamID)
-//     if err != nil {
-//         return nil, err
-//     }
+	return ch, nil
+}
 
-//     for msg := range ch {
-//         // Simulate processing (e.g., transformation or aggregation)
-//         processedMsg := domain.Message{
-//             StreamID: msg.StreamID,
-//             Payload:  "Processed: " + msg.Payload,
-//         }
-//         messages = append(messages, processedMsg)
-//     }
-//     return messages, nil
-// }
+func (r *KafkaRepository) GetResults(streamID string) ([]domain.Message, error) {
+    // Simulate real-time processing
+    messages := []domain.Message{}
+    ch, err := r.ReceiveMessages(streamID)
+    if err != nil {
+        return nil, err
+    }
+
+    for msg := range ch {
+        // Simulate processing (e.g., transformation or aggregation)
+        processedMsg := domain.Message{
+            StreamID: msg.StreamID,
+            Payload:  "Processed: " + msg.Payload,
+        }
+        messages = append(messages, processedMsg)
+    }
+    return messages, nil
+}

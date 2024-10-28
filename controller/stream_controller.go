@@ -49,15 +49,17 @@ func (c *StreamController) SendData(ctx *gin.Context) {
     ctx.JSON(http.StatusOK, gin.H{"status": "Data sent"})
 }
 
-// func (c *StreamController) GetResults(ctx *gin.Context) {
-//     streamID := ctx.Param("stream_id")
-//     results, err := c.usecase.GetResults(streamID)
-//     if err != nil {
-//         ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-//         return
-//     }
-//     ctx.JSON(http.StatusOK, gin.H{"results": results})
-// }
+func (c *StreamController) GetResults(ctx *gin.Context) {
+    streamID := ctx.Param("stream_id")
+    messages, err := c.usecase.GetResults(streamID)
+    if err != nil {
+        ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
+
+    // Return the messages as a JSON response
+    ctx.JSON(http.StatusOK, messages)
+}
 
 func (c *StreamController) HandleWebSocket(ctx *gin.Context) {
     streamID := ctx.Param("stream_id")
